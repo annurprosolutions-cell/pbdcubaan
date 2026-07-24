@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard PBD Sekolah | Cemerlang</title>
+    <!-- Memuatkan Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuatkan Chart.js untuk fungsi Analisis -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
@@ -13,34 +16,86 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         /* Glassmorphism utility */
         .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
+        .tab-btn, .view-btn { transition: all 0.2s ease-in-out; }
     </style>
 </head>
 <body class="text-gray-800 antialiased h-screen flex flex-col">
 
     <!-- URL Backend Hardcoded -->
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwctHqV78XTrfa9kWUrPiMKc_2j2oHHNKC2GhUgysGtOmM080XUTsXwDaQUMlCRDYaXIA/exec'; 
-        // State Pengguna
+        // Sila masukkan URL Web App Google Apps Script anda di sini jika berbeza
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwWbzJWfmeP5NE94CrjUkgFZ6OX3Acnr3lBC4ESdB0-cvyUpFPyKiEWOi-f6ru2BY4xyQ/exec'; 
         let sessionToken = sessionStorage.getItem('pbd_session') || null;
     </script>
 
     <div id="toast" class="fixed top-5 right-5 z-50 transform transition-all duration-300 translate-x-full opacity-0">
         <div id="toast-content" class="bg-white rounded-lg shadow-xl p-4 flex items-center gap-3 border-l-4">
-            <span id="toast-msg" class="font-medium"></span>
+            <span id="toast-msg" class="font-medium text-sm"></span>
         </div>
     </div>
 
     <!-- PDPA Consent Modal -->
-    <div id="pdpa-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+    <div id="pdpa-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-fade-in">
-            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center"><svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg> Notis PDPA</h2>
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg> 
+                Notis PDPA
+            </h2>
             <p class="text-sm text-gray-600 mb-4 text-justify">
                 Selaras dengan <strong>Akta Perlindungan Data Peribadi (PDPA) 2010</strong>, data yang dipaparkan mengandungi maklumat sulit murid. Anda bertanggungjawab untuk:<br><br>
                 1. Tidak memuat turun atau berkongsi data ini tanpa kebenaran.<br>
                 2. Mengakses data hanya untuk tujuan pendidikan dan pentaksiran.<br>
-                3. Sistem ini membuang rekod sesi akses anda secara automatik selepas 12 jam (Retention Period).
+                3. Sistem ini membuang rekod sesi akses anda secara automatik selepas 12 jam.
             </p>
             <button onclick="acceptPDPA()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Saya Faham & Bersetuju</button>
+        </div>
+    </div>
+
+    <!-- Form Modal CRUD (Add/Edit) -->
+    <div id="form-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+            <div class="bg-blue-600 p-4 text-white flex justify-between items-center">
+                <h2 id="modal-title" class="text-lg font-bold">Tambah Murid Baru</h2>
+                <button onclick="closeModal()" class="text-white hover:text-gray-200 focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <form id="student-form" class="p-6 overflow-y-auto flex-1" onsubmit="handleFormSubmit(event)">
+                <input type="hidden" id="form-mode" value="add">
+                <input type="hidden" id="form-original-name" value="">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Nama Penuh Murid</label>
+                        <input type="text" id="input-NAMA MURID" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Jantina</label>
+                        <select id="input-JANTINA" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            <option value="">Pilih Jantina</option>
+                            <option value="Lelaki">LELAKI</option>
+                            <option value="Perempuan">PEREMPUAN</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h3 class="font-bold text-gray-800 border-b pb-2 mb-4">Pencapaian Tahap Penguasaan (TP)</h3>
+                <!-- Container untuk dropwdown subjek secara dinamik -->
+                <div id="subject-inputs" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6"></div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Ulasan Guru (Pilihan)</label>
+                    <textarea id="input-ULASAN GURU" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg">Batal</button>
+                    <button type="submit" id="btn-save" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center">
+                        Simpan <div id="save-loader" class="loader ml-2 hidden border-blue-600 border-t-white w-4 h-4 border-2 border-t-2"></div>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -61,7 +116,7 @@
                 </div>
                 <button type="submit" id="btn-login" class="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition-colors">
                     <span>Log Masuk Secure</span>
-                    <div id="login-loader" class="loader ml-3 hidden border-gray-900 border-t-white"></div>
+                    <div id="login-loader" class="loader ml-3 hidden border-gray-900 border-t-white w-5 h-5 border-2 border-t-2"></div>
                 </button>
             </form>
             <div class="bg-gray-50 p-4 text-center text-xs text-gray-500 border-t border-gray-100">
@@ -70,50 +125,121 @@
         </div>
     </div>
 
-    <div id="view-dashboard" class="hidden flex-1 flex-col">
+    <div id="view-dashboard" class="hidden flex-1 flex-col h-screen overflow-hidden">
         <!-- Navbar -->
-        <nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10 relative">
+        <nav class="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0 z-10 relative">
             <div class="flex items-center gap-3">
-                <div class="bg-blue-600 text-white p-2 rounded-lg"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
-                <h1 class="text-xl font-bold text-gray-800">Dashboard PBD</h1>
+                <div class="bg-blue-600 text-white p-2 rounded-lg">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Dashboard PBD Sekolah</h1>
             </div>
             <button onclick="logout()" class="text-sm font-medium text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-md transition-colors">Log Keluar</button>
         </nav>
 
         <!-- Subnav & Controls -->
-        <div class="bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap gap-4 items-center">
-            <div class="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
-                <button onclick="loadData('Tahun_4')" id="tab-Tahun_4" class="tab-btn px-4 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700">Tahun 4</button>
-                <button onclick="loadData('Tahun_5')" id="tab-Tahun_5" class="tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Tahun 5</button>
-                <button onclick="loadData('Tahun_6')" id="tab-Tahun_6" class="tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Tahun 6</button>
+        <div class="bg-gray-50 border-b border-gray-200 px-6 py-3 flex flex-wrap gap-4 justify-between items-center shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
+                    <button onclick="loadData('Tahun_4')" id="tab-Tahun_4" class="tab-btn px-4 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700">Tahun 4</button>
+                    <button onclick="loadData('Tahun_5')" id="tab-Tahun_5" class="tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Tahun 5</button>
+                    <button onclick="loadData('Tahun_6')" id="tab-Tahun_6" class="tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900">Tahun 6</button>
+                </div>
+                <div id="data-loader" class="loader hidden ml-2 border-blue-200 border-t-blue-600 w-5 h-5 border-2 border-t-2"></div>
             </div>
-            <div id="data-loader" class="loader hidden ml-2 border-blue-200 border-t-blue-600"></div>
+
+            <!-- Dashboard View Controls & Actions -->
+            <div class="flex items-center gap-3">
+                <div class="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
+                    <button onclick="toggleView('jadual')" id="view-jadual" class="view-btn px-4 py-2 text-sm font-medium rounded-md bg-indigo-100 text-indigo-700 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg> Senarai
+                    </button>
+                    <button onclick="toggleView('analisis')" id="view-analisis" class="view-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg> Analisis
+                    </button>
+                </div>
+                <!-- Butang Tambah Murid -->
+                <button onclick="openModal('add')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Tambah Murid
+                </button>
+            </div>
         </div>
 
-        <!-- Data Table Area -->
-        <div class="flex-1 overflow-auto p-6 relative">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
-                <div class="overflow-x-auto">
+        <!-- Main Content Area -->
+        <div class="flex-1 overflow-hidden relative bg-gray-50 p-6 flex flex-col">
+            
+            <!-- View: Data Table -->
+            <div id="area-jadual" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col h-full">
+                <div class="overflow-x-auto overflow-y-auto flex-1">
                     <table class="w-full text-sm text-left whitespace-nowrap">
-                        <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10" id="table-head">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-20" id="table-head">
                             <!-- Headers rendered dynamically -->
                         </thead>
                         <tbody id="table-body" class="divide-y divide-gray-100">
-                            <!-- Data rows rendered dynamically safely (XSS protected) -->
-                            <tr><td colspan="100%" class="text-center py-8 text-gray-500">Pilih tahun untuk memuat data.</td></tr>
+                            <tr><td colspan="100%" class="text-center py-8 text-gray-500">Sila pilih tahun.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
+
+            <!-- View: Analisis Dashboard -->
+            <div id="area-analisis" class="hidden flex-1 overflow-y-auto w-full">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <!-- Stat Card 1 -->
+                    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-blue-100 text-blue-600 rounded-lg"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Jumlah Murid</p>
+                            <h3 id="stat-jumlah" class="text-2xl font-bold text-gray-800">0</h3>
+                        </div>
+                    </div>
+                    <!-- Stat Card 2 -->
+                    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+                        <div class="p-3 bg-pink-100 text-pink-600 rounded-lg"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg></div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Nisbah Jantina (L/P)</p>
+                            <h3 id="stat-jantina" class="text-2xl font-bold text-gray-800">0 / 0</h3>
+                        </div>
+                    </div>
+                    <!-- Subjek Filter for Charts -->
+                    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center">
+                        <label class="text-sm font-medium text-gray-500 mb-2">Pilih Subjek untuk Analisis TP</label>
+                        <select id="filter-subjek" onchange="renderCharts()" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm font-bold text-gray-700 bg-gray-50">
+                            <!-- Populated dynamically via initFormUI -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm col-span-1 min-h-[300px] flex flex-col">
+                        <h3 class="font-bold text-gray-700 mb-4 text-center">Pecahan Jantina</h3>
+                        <div class="flex-1 relative w-full"><canvas id="pieChart"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm lg:col-span-2 min-h-[300px] flex flex-col">
+                        <h3 class="font-bold text-gray-700 mb-4 text-center">Taburan Tahap Penguasaan (TP) Mengikut Subjek</h3>
+                        <div class="flex-1 relative w-full"><canvas id="barChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script>
+        // Data Struktur
         const HEADERS = ['NAMA MURID', 'JANTINA', 'B.MELAYU', 'B.INGGERIS', 'MATEMATIK', 'SAINS', 'PEND ISLAM', 'B.ARAB', 'PEND MORAL', 'B.TAMIL', 'MUZIK', 'PEND SENI VISUAL', 'RBT', 'SEJARAH', 'PJ KESIHATAN', 'ULASAN GURU'];
+        const SUBJECTS = HEADERS.slice(2, 15); // Ambil subjek sahaja
+        
+        // State
         let currentTab = 'Tahun_4';
+        let globalData = []; 
+        let activeView = 'jadual';
+        let tpBarChart = null;
+        let genderPieChart = null;
 
-        // Check if already logged in on load
+        // Inisialisasi Aplikasi
         window.onload = () => {
+            initFormUI(); 
             if (sessionToken) {
                 showDashboard();
             } else {
@@ -121,51 +247,31 @@
             }
         };
 
-        // Utility: Show Toast (Alternative to alert)
         function showToast(message, type = 'error') {
             const toast = document.getElementById('toast');
             const msgEl = document.getElementById('toast-msg');
             const content = document.getElementById('toast-content');
-            
-            msgEl.textContent = message; // Safe assignment
+            msgEl.textContent = message;
             
             content.className = `bg-white rounded-lg shadow-xl p-4 flex items-center gap-3 border-l-4 ${type === 'error' ? 'border-red-500 text-red-700' : 'border-green-500 text-green-700'}`;
-            
             toast.classList.remove('translate-x-full', 'opacity-0');
-            setTimeout(() => {
-                toast.classList.add('translate-x-full', 'opacity-0');
-            }, 4000);
+            setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); }, 4000);
         }
 
-        // Utility: API Fetcher (Ensures standard REST-like calls even in AppScript)
         async function apiCall(action, payload) {
-            if (!API_URL) {
-                showToast("Sistem berada dalam mod preview. Sila deploy ke Google Apps Script.", "error");
-                return null;
-            }
-
+            if (!API_URL) { showToast("Sistem ralat: API URL tidak disetkan.", "error"); return null; }
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
-                    body: JSON.stringify({
-                        token: sessionToken, // Token wajib hantar
-                        action: action,
-                        payload: payload
-                    }),
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Apps script memerlukan text/plain untuk CORS lancar
+                    body: JSON.stringify({ token: sessionToken, action: action, payload: payload }),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Elak CORS Preflight
                 });
-                
                 const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.message);
-                }
+                if (!result.success) throw new Error(result.message);
                 return result.data;
             } catch (err) {
                 showToast(err.message, "error");
-                // Log keluar jika token tamat tempoh / tidak sah
-                if(err.message.includes("Akses ditolak") || err.message.includes("tamat tempoh")) {
-                    logout();
-                }
+                if(err.message.includes("Akses ditolak") || err.message.includes("tamat tempoh")) logout();
                 throw err;
             }
         }
@@ -174,27 +280,18 @@
             e.preventDefault();
             const btn = document.getElementById('btn-login');
             const loader = document.getElementById('login-loader');
-            
-            btn.disabled = true;
-            loader.classList.remove('hidden');
-
+            btn.disabled = true; loader.classList.remove('hidden');
             try {
                 const data = await apiCall('login', {
                     username: document.getElementById('username').value,
                     password: document.getElementById('password').value
                 });
-
                 if (data && data.token) {
                     sessionToken = data.token;
                     sessionStorage.setItem('pbd_session', sessionToken);
                     document.getElementById('pdpa-modal').classList.remove('hidden');
                 }
-            } catch (err) {
-                // Error dipaparkan oleh showToast dalam apiCall
-            } finally {
-                btn.disabled = false;
-                loader.classList.add('hidden');
-            }
+            } catch (err) {} finally { btn.disabled = false; loader.classList.add('hidden'); }
         }
 
         function acceptPDPA() {
@@ -208,7 +305,7 @@
             sessionStorage.removeItem('pbd_session');
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-login').classList.remove('hidden');
-            document.getElementById('table-body').innerHTML = ''; // Cleansing data
+            document.getElementById('table-body').innerHTML = '';
             document.getElementById('login-form').reset();
         }
 
@@ -217,39 +314,66 @@
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('view-dashboard').classList.add('flex');
             renderTableHeaders();
-            loadData(currentTab);
+            if (globalData.length === 0) loadData(currentTab);
+        }
+
+        function toggleView(view) {
+            activeView = view;
+            
+            // Reset butang state
+            document.querySelectorAll('.view-btn').forEach(el => {
+                el.className = "view-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900 flex items-center gap-2";
+            });
+            
+            // Aktifkan butang yg ditekan
+            const activeClass = "view-btn px-4 py-2 text-sm font-medium rounded-md bg-indigo-100 text-indigo-700 flex items-center gap-2";
+            document.getElementById('view-' + view).className = activeClass;
+            
+            if(view === 'jadual') {
+                document.getElementById('area-analisis').classList.add('hidden');
+                document.getElementById('area-jadual').classList.remove('hidden');
+            } else {
+                document.getElementById('area-jadual').classList.add('hidden');
+                document.getElementById('area-analisis').classList.remove('hidden');
+                renderCharts(); // Render graf apabila dibuka
+            }
         }
 
         function renderTableHeaders() {
             const tr = document.createElement('tr');
-            // Sticky row number
+            
             let thNum = document.createElement('th');
-            thNum.className = "px-4 py-3 sticky left-0 bg-gray-100 z-10 w-10 text-center";
+            thNum.className = "px-4 py-3 sticky left-0 bg-gray-100 z-30 w-10 text-center";
             thNum.textContent = "#";
             tr.appendChild(thNum);
 
             HEADERS.forEach(header => {
                 let th = document.createElement('th');
                 th.className = "px-6 py-3 tracking-wider font-semibold";
-                // Jika NAMA MURID, lekatkan di kiri supaya scroll melintang tak hilang nama
                 if(header === 'NAMA MURID') {
-                    th.className += " sticky left-10 bg-gray-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[200px]";
+                    th.className += " sticky left-[50px] bg-gray-100 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[250px]";
                 }
-                th.textContent = header; // XSS Safe: textContent
+                th.textContent = header;
                 tr.appendChild(th);
             });
             
+            // Kolum Tindakan
+            let thAct = document.createElement('th');
+            thAct.className = "px-6 py-3 tracking-wider font-semibold sticky right-0 bg-gray-100 z-30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center w-24";
+            thAct.textContent = "TINDAKAN";
+            tr.appendChild(thAct);
+            
             const thead = document.getElementById('table-head');
-            thead.innerHTML = ''; // Safe kerana kita append elements
+            thead.innerHTML = '';
             thead.appendChild(tr);
         }
 
         async function loadData(tahun) {
             currentTab = tahun;
             
-            // UI Tab management
+            // Highlight active tab
             document.querySelectorAll('.tab-btn').forEach(el => {
-                el.className = "tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900 transition-colors";
+                el.className = "tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900";
             });
             document.getElementById('tab-' + tahun).className = "tab-btn px-4 py-2 text-sm font-medium rounded-md bg-blue-100 text-blue-700 shadow-inner";
             
@@ -260,8 +384,9 @@
             tbody.innerHTML = '<tr><td colspan="100%" class="text-center py-10 text-gray-400">Memuatkan data dari pangkalan...</td></tr>';
 
             try {
-                const records = await apiCall('get_dashboard', { tahun: tahun });
-                renderTableData(records);
+                globalData = await apiCall('get_dashboard', { tahun: tahun });
+                renderTableData(globalData);
+                if(activeView === 'analisis') renderCharts();
             } catch (err) {
                 tbody.innerHTML = `<tr><td colspan="100%" class="text-center py-10 text-red-500 font-medium">Gagal memuatkan data. ${err.message}</td></tr>`;
             } finally {
@@ -269,35 +394,33 @@
             }
         }
 
-        // Strictly safe DOM updating to prevent XSS (Tidak guna innerHTML)
         function renderTableData(records) {
             const tbody = document.getElementById('table-body');
             tbody.innerHTML = ''; 
-
+            
             if (!records || records.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="100%" class="text-center py-10 text-gray-500">Tiada rekod ditemui untuk tahun ini.</td></tr>';
                 return;
             }
-
+            
             records.forEach((row, index) => {
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-blue-50/50 transition-colors group";
+                tr.className = "hover:bg-blue-50 transition-colors group";
                 
-                // Numbering
                 const tdNum = document.createElement('td');
-                tdNum.className = "px-4 py-3 text-center text-gray-400 font-medium sticky left-0 bg-white group-hover:bg-blue-50/50";
+                tdNum.className = "px-4 py-3 text-center text-gray-400 font-medium sticky left-0 bg-white group-hover:bg-blue-50 z-10 border-b border-gray-100";
                 tdNum.textContent = index + 1;
                 tr.appendChild(tdNum);
 
                 HEADERS.forEach(header => {
                     const td = document.createElement('td');
-                    td.className = "px-6 py-3 text-gray-700";
+                    td.className = "px-6 py-3 text-gray-700 border-b border-gray-100";
                     if(header === 'NAMA MURID') {
-                        td.className += " sticky left-10 bg-white group-hover:bg-blue-50/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-medium";
+                        td.className += " sticky left-[50px] bg-white group-hover:bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-medium";
                     }
                     
-                    // Prestasi Warna Gred Visual (Contoh TP 1 hingga 6)
                     let val = row[header] !== undefined ? row[header] : '';
+                    
                     if (typeof val === 'string' && val.toUpperCase().startsWith('TP')) {
                         const span = document.createElement('span');
                         const tpNum = parseInt(val.replace(/\D/g,''));
@@ -307,13 +430,191 @@
                         else if(tpNum >= 3) span.className += "bg-yellow-100 text-yellow-700";
                         else span.className += "bg-red-100 text-red-700";
                         td.appendChild(span);
-                    } else {
-                        td.textContent = val; // MENCEGAH XSS - Data masuk sebagai string, bukan HTML
+                    } else { 
+                        td.textContent = val; 
                     }
                     tr.appendChild(td);
                 });
+
+                const tdAct = document.createElement('td');
+                tdAct.className = "px-6 py-3 sticky right-0 bg-white group-hover:bg-blue-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center border-b border-gray-100";
+                tdAct.innerHTML = `<button onclick="openModal('edit', ${index})" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded text-xs font-semibold transition-colors">Edit</button>`;
+                tr.appendChild(tdAct);
+
                 tbody.appendChild(tr);
             });
+        }
+
+        function initFormUI() {
+            const container = document.getElementById('subject-inputs');
+            const filterSubjek = document.getElementById('filter-subjek');
+            
+            // Reset dahulu jika function dipanggil dua kali
+            container.innerHTML = '';
+            filterSubjek.innerHTML = '';
+            
+            SUBJECTS.forEach((sub, i) => {
+                // Populate Filter Dropdown
+                if(i === 0) filterSubjek.innerHTML += `<option value="${sub}" selected>${sub}</option>`;
+                else filterSubjek.innerHTML += `<option value="${sub}">${sub}</option>`;
+
+                // Populate Modal Form TP Dropdowns
+                container.innerHTML += `
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">${sub}</label>
+                        <select id="input-${sub}" class="w-full px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-300 focus:ring-2 focus:ring-blue-500 text-sm font-medium">
+                            <option value="">Tiada TP</option>
+                            <option value="TP 1">TP 1</option>
+                            <option value="TP 2">TP 2</option>
+                            <option value="TP 3">TP 3</option>
+                            <option value="TP 4">TP 4</option>
+                            <option value="TP 5">TP 5</option>
+                            <option value="TP 6">TP 6</option>
+                        </select>
+                    </div>
+                `;
+            });
+        }
+
+        function renderCharts() {
+            if (!globalData || globalData.length === 0) return;
+            
+            // 1. Kira KPI Asas
+            document.getElementById('stat-jumlah').textContent = globalData.length;
+            const lelaki = globalData.filter(d => (d['JANTINA'] || '').toString().toUpperCase() === 'LELAKI').length;
+            const perempuan = globalData.length - lelaki;
+            document.getElementById('stat-jantina').textContent = `${lelaki} / ${perempuan}`;
+
+            // 2. Graf Pai Jantina
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            if (genderPieChart) genderPieChart.destroy();
+            
+            genderPieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lelaki', 'Perempuan'],
+                    datasets: [{ 
+                        data: [lelaki, perempuan], 
+                        backgroundColor: ['#3b82f6', '#ec4899'], 
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { position: 'bottom' } },
+                    cutout: '65%'
+                }
+            });
+
+            // 3. Graf Bar Taburan TP
+            const subjekPilihan = document.getElementById('filter-subjek').value;
+            const tpCounts = { 'TP 1': 0, 'TP 2': 0, 'TP 3': 0, 'TP 4': 0, 'TP 5': 0, 'TP 6': 0 };
+            
+            globalData.forEach(d => {
+                let val = d[subjekPilihan];
+                if (val && typeof val === 'string') {
+                    const match = val.match(/TP\s*([1-6])/i); // Kesan "TP 1", "tp1", dll
+                    if (match) tpCounts[`TP ${match[1]}`]++;
+                }
+            });
+
+            const barCtx = document.getElementById('barChart').getContext('2d');
+            if (tpBarChart) tpBarChart.destroy();
+            
+            tpBarChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(tpCounts),
+                    datasets: [{
+                        label: `Bil. Murid (${subjekPilihan})`,
+                        data: Object.values(tpCounts),
+                        backgroundColor: ['#fca5a5', '#fdba74', '#fde047', '#bef264', '#86efac', '#93c5fd'],
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { precision: 0 },
+                            grid: { color: '#f3f4f6' }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function openModal(mode, dataIndex = null) {
+            const modal = document.getElementById('form-modal');
+            const form = document.getElementById('student-form');
+            form.reset(); 
+            
+            document.getElementById('form-mode').value = mode;
+            
+            if(mode === 'edit' && dataIndex !== null) {
+                document.getElementById('modal-title').textContent = "Kemaskini Maklumat & PBD Murid";
+                const row = globalData[dataIndex];
+                
+                // Set nama asal sebagai reference point utk di kemaskini di backend
+                document.getElementById('form-original-name').value = row['NAMA MURID']; 
+                
+                // Isi borang dengan data sedia ada
+                HEADERS.forEach(header => {
+                    const inputEl = document.getElementById(`input-${header}`);
+                    if(inputEl) inputEl.value = row[header] || '';
+                });
+            } else {
+                document.getElementById('modal-title').textContent = "Tambah Murid Baru (" + currentTab.replace('_',' ') + ")";
+                document.getElementById('form-original-name').value = "";
+            }
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('form-modal').classList.add('hidden');
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const btnSave = document.getElementById('btn-save');
+            const loader = document.getElementById('save-loader');
+            
+            btnSave.disabled = true; 
+            loader.classList.remove('hidden');
+
+            const mode = document.getElementById('form-mode').value;
+            const apiAction = mode === 'add' ? 'add_record' : 'update_record';
+            
+            // Kumpul Data dari Form berdasarkan senarai HEADERS
+            let recordData = {};
+            HEADERS.forEach(header => {
+                const inputEl = document.getElementById(`input-${header}`);
+                if(inputEl) recordData[header] = inputEl.value.trim();
+            });
+
+            const payload = {
+                tahun: currentTab,
+                data: recordData,
+                originalName: mode === 'edit' ? document.getElementById('form-original-name').value : null
+            };
+
+            try {
+                const result = await apiCall(apiAction, payload);
+                showToast(result.message, "success");
+                closeModal();
+                loadData(currentTab); // Refresh data terkini
+            } catch (err) {
+                // Ralat dipaparkan secara automatik oleh fungsi apiCall
+            } finally {
+                btnSave.disabled = false; 
+                loader.classList.add('hidden');
+            }
         }
     </script>
 </body>
