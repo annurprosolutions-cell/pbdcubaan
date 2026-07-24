@@ -24,7 +24,7 @@
     <!-- URL Backend Hardcoded -->
     <script>
         // Sila masukkan URL Web App Google Apps Script anda di sini jika berbeza
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwWbzJWfmeP5NE94CrjUkgFZ6OX3Acnr3lBC4ESdB0-cvyUpFPyKiEWOi-f6ru2BY4xyQ/exec'; 
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxOboZT0LLwMaQyzUBo0h6lz8ZaJv1EeCRTWCu2mh2OTnr5-BZ2R2X22Lhs0g7iCrju-Q/exec'; 
         let sessionToken = sessionStorage.getItem('pbd_session') || null;
     </script>
 
@@ -158,6 +158,12 @@
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg> Analisis
                     </button>
                 </div>
+                
+                <!-- Butang Mod Kemaskini Pantas -->
+                <button id="btn-toggle-edit" onclick="toggleQuickEdit()" class="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> <span id="text-toggle-edit">Mod Kemaskini Pantas</span>
+                </button>
+
                 <!-- Butang Tambah Murid -->
                 <button onclick="openModal('add')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Tambah Murid
@@ -222,6 +228,15 @@
                 </div>
             </div>
 
+            <!-- Floating Save Button untuk Mod Kemaskini Pantas -->
+            <div id="floating-save-container" class="hidden absolute bottom-8 right-8 z-40 animate-fade-in">
+                <button onclick="saveBatchChanges()" id="btn-batch-save" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-full shadow-2xl font-bold flex items-center gap-3 transform hover:scale-105 transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                    Simpan Perubahan Pukal
+                    <div id="batch-save-loader" class="loader ml-2 hidden border-indigo-600 border-t-white w-5 h-5 border-2 border-t-2"></div>
+                </button>
+            </div>
+
         </div>
     </div>
 
@@ -236,6 +251,10 @@
         let activeView = 'jadual';
         let tpBarChart = null;
         let genderPieChart = null;
+        
+        // State untuk Quick Edit
+        let isQuickEditMode = false;
+        let pendingBatchChanges = {}; // Menyimpan perubahan yang belum disave
 
         // Inisialisasi Aplikasi
         window.onload = () => {
@@ -313,6 +332,10 @@
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('view-dashboard').classList.add('flex');
+            
+            // Tutup mod quick edit jika buka tahun baru
+            if(isQuickEditMode) toggleQuickEdit(); 
+
             renderTableHeaders();
             if (globalData.length === 0) loadData(currentTab);
         }
@@ -371,6 +394,9 @@
         async function loadData(tahun) {
             currentTab = tahun;
             
+            // Tutup mod edit apabila menukar tab
+            if(isQuickEditMode) toggleQuickEdit();
+
             // Highlight active tab
             document.querySelectorAll('.tab-btn').forEach(el => {
                 el.className = "tab-btn px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-gray-900";
@@ -414,24 +440,50 @@
 
                 HEADERS.forEach(header => {
                     const td = document.createElement('td');
-                    td.className = "px-6 py-3 text-gray-700 border-b border-gray-100";
+                    td.className = "px-6 py-3 text-gray-700 border-b border-gray-100 min-w-[120px]";
                     if(header === 'NAMA MURID') {
-                        td.className += " sticky left-[50px] bg-white group-hover:bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-medium";
+                        td.className = "px-6 py-3 text-gray-700 border-b border-gray-100 sticky left-[50px] bg-white group-hover:bg-blue-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] font-medium min-w-[250px]";
                     }
                     
                     let val = row[header] !== undefined ? row[header] : '';
                     
-                    if (typeof val === 'string' && val.toUpperCase().startsWith('TP')) {
-                        const span = document.createElement('span');
-                        const tpNum = parseInt(val.replace(/\D/g,''));
-                        span.textContent = val;
-                        span.className = "px-2 py-1 rounded-md text-xs font-bold ";
-                        if(tpNum >= 5) span.className += "bg-green-100 text-green-700";
-                        else if(tpNum >= 3) span.className += "bg-yellow-100 text-yellow-700";
-                        else span.className += "bg-red-100 text-red-700";
-                        td.appendChild(span);
-                    } else { 
-                        td.textContent = val; 
+                    // Logik Render: Adakah kita dalam Mod Edit & adakah ia kolum Subjek?
+                    if (isQuickEditMode && SUBJECTS.includes(header)) {
+                        const select = document.createElement('select');
+                        select.className = "w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium";
+                        
+                        // Option Kosong
+                        let optEmpty = document.createElement('option');
+                        optEmpty.value = ""; optEmpty.textContent = "-";
+                        select.appendChild(optEmpty);
+
+                        // Option TP 1-6
+                        for(let i=1; i<=6; i++) {
+                            let opt = document.createElement('option');
+                            opt.value = `TP ${i}`;
+                            opt.textContent = `TP ${i}`;
+                            if(val.toString().trim().toUpperCase() === `TP ${i}`) opt.selected = true;
+                            select.appendChild(opt);
+                        }
+
+                        // Event Listener bila cikgu tukar markah
+                        select.onchange = (e) => handleQuickEditChange(index, header, e.target.value);
+                        td.appendChild(select);
+                    
+                    } else {
+                        // Render Biasa (Badge)
+                        if (typeof val === 'string' && val.toUpperCase().startsWith('TP')) {
+                            const span = document.createElement('span');
+                            const tpNum = parseInt(val.replace(/\D/g,''));
+                            span.textContent = val;
+                            span.className = "px-2 py-1 rounded-md text-xs font-bold inline-block w-full text-center ";
+                            if(tpNum >= 5) span.className += "bg-green-100 text-green-700";
+                            else if(tpNum >= 3) span.className += "bg-yellow-100 text-yellow-700";
+                            else span.className += "bg-red-100 text-red-700";
+                            td.appendChild(span);
+                        } else { 
+                            td.textContent = val; 
+                        }
                     }
                     tr.appendChild(td);
                 });
@@ -443,6 +495,88 @@
 
                 tbody.appendChild(tr);
             });
+        }
+
+        // --- FUNGSI QUICK EDIT (BARU) ---
+
+        function toggleQuickEdit() {
+            isQuickEditMode = !isQuickEditMode;
+            const btn = document.getElementById('btn-toggle-edit');
+            const txt = document.getElementById('text-toggle-edit');
+            
+            if (isQuickEditMode) {
+                // Mod Aktif
+                btn.className = "bg-red-100 hover:bg-red-200 text-red-800 border border-red-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors";
+                txt.textContent = "Batal Mod Kemaskini";
+                pendingBatchChanges = {}; // Reset perubahan
+                document.getElementById('floating-save-container').classList.add('hidden');
+            } else {
+                // Mod Batal
+                btn.className = "bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors";
+                txt.textContent = "Mod Kemaskini Pantas";
+                
+                // Jika batal, buang perubahan yang tak disave dan render balik data asal
+                if(Object.keys(pendingBatchChanges).length > 0) {
+                    showToast("Perubahan yang tidak disimpan telah dibatalkan.", "error");
+                }
+                pendingBatchChanges = {};
+                document.getElementById('floating-save-container').classList.add('hidden');
+            }
+            
+            // Render semula jadual berdasarkan state mod yang baru
+            renderTableData(globalData);
+        }
+
+        function handleQuickEditChange(dataIndex, subject, newValue) {
+            // Salin row original dari globalData jika belum ada dalam pending
+            if (!pendingBatchChanges[dataIndex]) {
+                const rowData = { ...globalData[dataIndex] };
+                pendingBatchChanges[dataIndex] = {
+                    originalName: rowData['NAMA MURID'],
+                    data: rowData
+                };
+            }
+            
+            // Update data dalam pending list
+            pendingBatchChanges[dataIndex].data[subject] = newValue;
+            
+            // Tunjukkan butang terapung Save Pukal
+            document.getElementById('floating-save-container').classList.remove('hidden');
+        }
+
+        async function saveBatchChanges() {
+            const changesArray = Object.values(pendingBatchChanges);
+            if (changesArray.length === 0) return;
+
+            const btnSave = document.getElementById('btn-batch-save');
+            const loader = document.getElementById('batch-save-loader');
+            
+            btnSave.disabled = true; 
+            loader.classList.remove('hidden');
+
+            const payload = {
+                tahun: currentTab,
+                changes: changesArray
+            };
+
+            try {
+                const result = await apiCall('batch_update_records', payload);
+                showToast(result.message, "success");
+                
+                // Tutup mod edit
+                isQuickEditMode = false;
+                document.getElementById('btn-toggle-edit').className = "bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm transition-colors";
+                document.getElementById('text-toggle-edit').textContent = "Mod Kemaskini Pantas";
+                document.getElementById('floating-save-container').classList.add('hidden');
+                pendingBatchChanges = {};
+
+                // Reload data terkini dari server
+                loadData(currentTab);
+            } catch (err) {
+                // Ralat dipaparkan automatik
+                btnSave.disabled = false; 
+                loader.classList.add('hidden');
+            }
         }
 
         function initFormUI() {
