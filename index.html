@@ -251,6 +251,7 @@
         let activeView = 'jadual';
         let tpBarChart = null;
         let genderPieChart = null;
+        let userRole = sessionStorage.getItem('pbd_role') || null;
         
         // State untuk Quick Edit
         let isQuickEditMode = false;
@@ -277,20 +278,25 @@
             setTimeout(() => { toast.classList.add('translate-x-full', 'opacity-0'); }, 4000);
         }
 
-        async function apiCall(action, payload) {
+        async function apiCall(action, payloadData = {}) {
             if (!API_URL) { showToast("Sistem ralat: API URL tidak disetkan.", "error"); return null; }
             try {
+                // Ratakan objek (flatten) agar sejajar dengan backend 'code.gs'
+                const requestBody = { token: sessionToken, action: action, ...payloadData };
+                
                 const response = await fetch(API_URL, {
                     method: 'POST',
-                    body: JSON.stringify({ token: sessionToken, action: action, payload: payload }),
+                    body: JSON.stringify(requestBody),
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Elak CORS Preflight
                 });
                 const result = await response.json();
-                if (!result.success) throw new Error(result.message);
-                return result.data;
+                
+                // Pulangkan seluruh result object untuk mendapatkan metadata ekstra (contoh: role)
+                if (!result.success) throw new Error(result.error || result.message || "Ralat tidak diketahui.");
+                return result;
             } catch (err) {
                 showToast(err.message, "error");
-                if(err.message.includes("Akses ditolak") || err.message.includes("tamat tempoh")) logout();
+                if(err.message.includes("Sesi tamat") || err.message.includes("Akses Ditolak")) logout();
                 throw err;
             }
         }
@@ -307,21 +313,26 @@
                 });
                 if (data && data.token) {
                     sessionToken = data.token;
+                    userRole = data.role; // Simpan peranan (admin/user)
                     sessionStorage.setItem('pbd_session', sessionToken);
+                    sessionStorage.setItem('pbd_role', userRole);
                     document.getElementById('pdpa-modal').classList.remove('hidden');
                 }
-            } catch (err) {} finally { btn.disabled = false; loader.classList.add('hidden'); }
+            } catch (err) {
+                // Ralat dipaparkan automatik oleh apiCall
+            } finally { btn.disabled = false; loader.classList.add('hidden'); }
         }
 
         function acceptPDPA() {
             document.getElementById('pdpa-modal').classList.add('hidden');
             showDashboard();
-            loadData('Tahun_4');
         }
 
         function logout() {
             sessionToken = null;
+            userRole = null;
             sessionStorage.removeItem('pbd_session');
+            sessionStorage.removeItem('pbd_role');
             document.getElementById('view-dashboard').classList.add('hidden');
             document.getElementById('view-login').classList.remove('hidden');
             document.getElementById('table-body').innerHTML = '';
@@ -382,7 +393,7 @@
             
             // Kolum Tindakan
             let thAct = document.createElement('th');
-            thAct.className = "px-6 py-3 tracking-wider font-semibold sticky right-0 bg-gray-100 z-30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center w-24";
+            thAct.className = "px-6 py-3 tracking-wider font-semibold sticky right-0 bg-gray-100 z-30 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center min-w-[150px]";
             thAct.textContent = "TINDAKAN";
             tr.appendChild(thAct);
             
@@ -393,6 +404,8 @@
 
         async function loadData(tahun) {
             currentTab = tahun;
+            // Padankan format tab 'Tahun_4' kepada 'Tahun 4' yang diguna backend
+            const sheetName = tahun.replace('_', ' ');
             
             // Tutup mod edit apabila menukar tab
             if(isQuickEditMode) toggleQuickEdit();
@@ -410,7 +423,17 @@
             tbody.innerHTML = '<tr><td colspan="100%" class="text-center py-10 text-gray-400">Memuatkan data dari pangkalan...</td></tr>';
 
             try {
-                globalData = await apiCall('get_dashboard', { tahun: tahun });
+                const response = await apiCall('getDashboardData');
+                
+                // Semak dan perbaharui role jika dikembalikan
+                if (response.role) {
+                    userRole = response.role;
+                    sessionStorage.setItem('pbd_role', userRole);
+                }
+                
+                // Tapis data kepada sheet yang aktif
+                globalData = (response.data || []).filter(row => row['Tahun'] === sheetName);
+                
                 renderTableData(globalData);
                 if(activeView === 'analisis') renderCharts();
             } catch (err) {
@@ -490,11 +513,34 @@
 
                 const tdAct = document.createElement('td');
                 tdAct.className = "px-6 py-3 sticky right-0 bg-white group-hover:bg-blue-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center border-b border-gray-100";
-                tdAct.innerHTML = `<button onclick="openModal('edit', ${index})" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded text-xs font-semibold transition-colors">Edit</button>`;
+                
+                let actionButtons = `<button onclick="openModal('edit', ${index})" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded text-xs font-semibold transition-colors mr-2">Edit</button>`;
+                
+                // Paparkan butang Padam khas untuk Admin
+                if (userRole === 'admin') {
+                    const safeName = (row['NAMA MURID'] || '').replace(/'/g, "\\'");
+                    actionButtons += `<button onclick="deleteStudentRecord('${safeName}')" class="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded text-xs font-semibold transition-colors">Padam</button>`;
+                }
+
+                tdAct.innerHTML = actionButtons;
                 tr.appendChild(tdAct);
 
                 tbody.appendChild(tr);
             });
+        }
+        
+        async function deleteStudentRecord(namaMurid) {
+            if(!confirm(`Amaran: Adakah anda pasti untuk memadam rekod murid: ${namaMurid}?`)) return;
+            try {
+                await apiCall('deleteStudent', {
+                    tahun: currentTab.replace('_', ' '),
+                    namaMurid: namaMurid
+                });
+                showToast("Rekod berjaya dipadam", "success");
+                loadData(currentTab);
+            } catch(err) {
+                // Ralat dikendali secara automatik
+            }
         }
 
         // --- FUNGSI QUICK EDIT (BARU) ---
@@ -554,14 +600,19 @@
             btnSave.disabled = true; 
             loader.classList.remove('hidden');
 
-            const payload = {
-                tahun: currentTab,
-                changes: changesArray
-            };
+            const payloadUpdates = changesArray.map(item => {
+                const changes = { ...item.data };
+                delete changes['Tahun']; // Jangan hantar meta sheet kepada changes backend
+                return {
+                    tahun: currentTab.replace('_', ' '),
+                    name: item.originalName,
+                    changes: changes
+                };
+            });
 
             try {
-                const result = await apiCall('batch_update_records', payload);
-                showToast(result.message, "success");
+                const result = await apiCall('updateStudents', { updates: payloadUpdates });
+                showToast("Berjaya dikemaskini secara pukal!", "success");
                 
                 // Tutup mod edit
                 isQuickEditMode = false;
@@ -573,7 +624,6 @@
                 // Reload data terkini dari server
                 loadData(currentTab);
             } catch (err) {
-                // Ralat dipaparkan automatik
                 btnSave.disabled = false; 
                 loader.classList.add('hidden');
             }
@@ -723,7 +773,7 @@
             loader.classList.remove('hidden');
 
             const mode = document.getElementById('form-mode').value;
-            const apiAction = mode === 'add' ? 'add_record' : 'update_record';
+            const sheetName = currentTab.replace('_', ' ');
             
             // Kumpul Data dari Form berdasarkan senarai HEADERS
             let recordData = {};
@@ -732,15 +782,43 @@
                 if(inputEl) recordData[header] = inputEl.value.trim();
             });
 
-            const payload = {
-                tahun: currentTab,
-                data: recordData,
-                originalName: mode === 'edit' ? document.getElementById('form-original-name').value : null
-            };
-
             try {
-                const result = await apiCall(apiAction, payload);
-                showToast(result.message, "success");
+                if (mode === 'add') {
+                    // API backend 'addStudent' hanya mendaftar nama dan jantina asalnya
+                    await apiCall('addStudent', {
+                        tahun: sheetName,
+                        data: {
+                            nama: recordData['NAMA MURID'],
+                            jantina: recordData['JANTINA']
+                        }
+                    });
+                    
+                    // Semak jika guru telah mengisi markah subjek dalam modal sewaktu pendaftaran
+                    let hasGrades = Object.keys(recordData).some(key => key !== 'NAMA MURID' && key !== 'JANTINA' && recordData[key]);
+                    
+                    if (hasGrades) {
+                        await apiCall('updateStudents', {
+                            updates: [{
+                                tahun: sheetName,
+                                name: recordData['NAMA MURID'],
+                                changes: recordData
+                            }]
+                        });
+                    }
+                    showToast("Murid berjaya didaftarkan!", "success");
+                } else {
+                    // API backend untuk update menggunakan updateStudents array format
+                    const originalName = document.getElementById('form-original-name').value;
+                    await apiCall('updateStudents', {
+                        updates: [{
+                            tahun: sheetName,
+                            name: originalName,
+                            changes: recordData
+                        }]
+                    });
+                    showToast("Rekod berjaya dikemaskini!", "success");
+                }
+
                 closeModal();
                 loadData(currentTab); // Refresh data terkini
             } catch (err) {
